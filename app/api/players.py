@@ -13,7 +13,7 @@ router = APIRouter(prefix="/players", tags=["players"])
 
 @router.post("/lookup", status_code=status.HTTP_200_OK)
 def lookup_player(payload: PlayerLookupRequest, db: Session = Depends(get_db)):
-    # STEP 1: Account API (Riot ID) -> usa REGIONAL routing (EUROPE/AMERICAS/ASIA)
+
     account = get_summoner_by_name(
         payload.regional,
         payload.game_name,
@@ -27,12 +27,10 @@ def lookup_player(payload: PlayerLookupRequest, db: Session = Depends(get_db)):
     name = account.get("gameName") or payload.game_name
     now = datetime.now(timezone.utc)
 
-    # STEP 2: upsert DB (by puuid)
     player = db.query(Player).filter(Player.puuid == puuid).one_or_none()
 
     if player is None:
         player = Player(
-            # ✅ standard deciso:
             region=payload.regional.upper(),      # EUROPE
             platform=payload.platform.upper(),    # EUW1
             summoner_name=name,

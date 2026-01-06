@@ -15,26 +15,21 @@ router = APIRouter(prefix="/matches", tags=["matches"])
 
 @router.post("/import/by-puuid/{puuid}")
 def import_matches_by_puuid(puuid: str, count: int = 20, db: Session = Depends(get_db)):
-    # 1) player must exist
+
     player = db.query(Player).filter(Player.puuid == puuid).one_or_none()
     if not player:
         raise HTTPException(status_code=404, detail="Player not found. Run /players/lookup first.")
 
-    # ✅ standard deciso:
-    # - player.region = EUROPE (regional routing)
-    # - player.platform = EUW1 (platform shard)
     regional = (player.region or "").upper()
     platform = (player.platform or "").upper()
 
     if not regional or not platform:
         raise HTTPException(status_code=400, detail="Player missing region/platform. Re-run /players/lookup.")
 
-    # 2) get match ids (match-v5 usa REGIONAL routing)
     match_ids = get_match_ids_by_puuid(regional, puuid, start=0, count=count)
     if not match_ids:
         return {"requested": 0, "new_match_ids": 0, "inserted_matches": 0, "inserted_participants": 0}
 
-    # 3) avoid duplicates (matches già presenti)
     existing = set(mid for (mid,) in db.query(Match.match_id).filter(Match.match_id.in_(match_ids)).all())
     new_match_ids = [mid for mid in match_ids if mid not in existing]
 
@@ -51,7 +46,6 @@ def import_matches_by_puuid(puuid: str, count: int = 20, db: Session = Depends(g
         metadata = detail.get("metadata", {})
         match_id = metadata.get("matchId", mid)
 
-        # 3a) insert match header (ON CONFLICT DO NOTHING)
         match_row = {
             "match_id": match_id,
             "regional": regional,   # EUROPE
@@ -72,7 +66,6 @@ def import_matches_by_puuid(puuid: str, count: int = 20, db: Session = Depends(g
         if not participants:
             continue
 
-        # 3b) UPSERT/SEED players (tutti i puuid del match)
         player_rows = []
         riot_id_rows = []
         part_rows = []
@@ -89,7 +82,7 @@ def import_matches_by_puuid(puuid: str, count: int = 20, db: Session = Depends(g
                 "puuid": p_puuid,
                 "region": regional,     # EUROPE
                 "platform": platform,   # EUW1
-                "summoner_name": gname, # opzionale
+                "summoner_name": gname, 
                 "summoner_id": None,
                 "last_updated": now,
             })
@@ -115,14 +108,12 @@ def import_matches_by_puuid(puuid: str, count: int = 20, db: Session = Depends(g
                 "assists": p.get("assists"),
             })
 
-        # seed players: DO NOTHING se esiste già (puuid UNIQUE)
         if player_rows:
             stmt_p = insert(Player).values(player_rows).on_conflict_do_nothing(
                 index_elements=["puuid"]
             )
             db.execute(stmt_p)
 
-        # riot id history: se esiste aggiorno last_seen_at
         if riot_id_rows:
             stmt_r = insert(PlayerRiotId).values(riot_id_rows).on_conflict_do_update(
                 constraint="uq_player_riot_id",
@@ -130,7 +121,6 @@ def import_matches_by_puuid(puuid: str, count: int = 20, db: Session = Depends(g
             )
             db.execute(stmt_r)
 
-        # match participants: DO NOTHING su (match_id, puuid)
         if part_rows:
             stmt_mp = insert(MatchParticipant).values(part_rows).on_conflict_do_nothing(
                 constraint="uq_match_participant"

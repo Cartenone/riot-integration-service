@@ -11,7 +11,6 @@ class PlayerRiotId(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    # FK sul puuid (assicurati che players.puuid sia UNIQUE)
     puuid: Mapped[str] = mapped_column(
         String(90),
         ForeignKey("players.puuid", ondelete="CASCADE"),

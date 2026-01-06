@@ -15,7 +15,6 @@ class MatchParticipant(Base):
         index=True,
     )
 
-    # ✅ niente FK verso players
     puuid: Mapped[str] = mapped_column(String(90), nullable=False, index=True)
 
     game_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
